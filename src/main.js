@@ -109,7 +109,6 @@ async function getNodes() {
   await fetch(URL_NODES)
     .then(response => response.json())
     .then(data => {
-      console.log(data)
       nodes = data["nodes"];
     })
     .catch(error => {
