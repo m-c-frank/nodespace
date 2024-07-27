@@ -1,18 +1,20 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { ParametricGeometry } from 'three/addons/geometries/ParametricGeometry.js';
+import { createAxes } from './components/CoordinateSystem';
+import { createParametricSurface, createGridPlane } from './components/examples';
 
 let scene, camera, renderer, controls;
 let raycaster = new THREE.Raycaster();
 let mouse = new THREE.Vector2();
-let INTERSECTED = null;
 const URL_NODES = 'http://localhost:5000/nodes';
 let nodes = [];
 let selectedNodes = [];
+let hoveredNode = null;
 
 let defaultMaterial = new THREE.MeshBasicMaterial({ color: 0x808080 });
 let selectedMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
 let hoveredMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+let hoveredSelectedMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
 
 init();
 animate();
@@ -36,15 +38,15 @@ function init() {
   controls.enableDamping = true;
 
   // Create the coordinate system
-  createAxes();
+  createAxes(scene, 5, 5, 5);
 
   // Create default grid planes
-  createGridPlane(new THREE.Vector3(0, 0, 1)); // XY plane
-  createGridPlane(new THREE.Vector3(1, 0, 0)); // YZ plane
-  createGridPlane(new THREE.Vector3(0, 1, 0)); // ZX plane
+  createGridPlane(scene, new THREE.Vector3(0, 0, 1), 10, 10); // XY plane
+  createGridPlane(scene, new THREE.Vector3(1, 0, 0), 10, 10); // YZ plane
+  createGridPlane(scene, new THREE.Vector3(0, 1, 0), 10, 10); // ZX plane
 
   // Create a surface
-  createSurface();
+  createParametricSurface(scene);
 
   // Draw nodes
   drawNodes();
@@ -59,63 +61,6 @@ function init() {
   window.addEventListener('click', onClick, false);
 }
 
-function createAxes() {
-  // X axis
-  const xMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
-  const xGeometry = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(-10, 0, 0),
-    new THREE.Vector3(10, 0, 0)
-  ]);
-  const xAxis = new THREE.Line(xGeometry, xMaterial);
-  scene.add(xAxis);
-
-  // Y axis
-  const yMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
-  const yGeometry = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0, -10, 0),
-    new THREE.Vector3(0, 10, 0)
-  ]);
-  const yAxis = new THREE.Line(yGeometry, yMaterial);
-  scene.add(yAxis);
-
-  // Z axis
-  const zMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff });
-  const zGeometry = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0, 0, -10),
-    new THREE.Vector3(0, 0, 10)
-  ]);
-  const zAxis = new THREE.Line(zGeometry, zMaterial);
-  scene.add(zAxis);
-}
-
-function createGridPlane(normal) {
-  // Create a plane
-  const size = 10;
-  const divisions = 10;
-  const gridHelper = new THREE.GridHelper(size, divisions);
-  scene.add(gridHelper);
-
-  // Align the plane to the given normal
-  const quaternion = new THREE.Quaternion();
-  quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
-  gridHelper.applyQuaternion(quaternion);
-}
-
-function createSurface() {
-  function parametricFunction(u, v, target) {
-    var x = u * 10 - 5; // Range for x: -5 to 5
-    var y = v * 10 - 5; // Range for y: -5 to 5
-    var z = Math.sin(Math.sqrt(x * x + y * y)); // Example function: z = sin(sqrt(x^2 + y^2))
-    target.set(x, y, z);
-  }
-  // Create the parametric geometry
-  var parametricGeometry = new ParametricGeometry(parametricFunction, 100, 100);
-
-  // Create a basic material and mesh
-  var material = new THREE.MeshBasicMaterial({ color: 0x0077ff, wireframe: true });
-  var mesh = new THREE.Mesh(parametricGeometry, material);
-  scene.add(mesh);
-}
 
 async function getNodes() {
   //fetch from URL_NODES
@@ -149,10 +94,11 @@ async function drawNodes() {
   // nodes are spheres at random positions within the grid
   const fetchedNodes = await getNodes();
   fetchedNodes.forEach(node => {
-    const nodeMaterial = defaultMaterial
+    const nodeMaterial = defaultMaterial.clone();
     const nodeGeometry = new THREE.SphereGeometry(0.1, 32, 32);
     const sphere = new THREE.Mesh(nodeGeometry, nodeMaterial);
     sphere.position.set(node.x, node.y, node.z);
+    sphere.userData = { originalMaterial: nodeMaterial };
     scene.add(sphere);
     nodes.push(sphere); // Store reference to the node
   });
@@ -174,8 +120,11 @@ function onClick(event) {
   if (intersects.length > 0) {
     const intersectedNode = intersects[0].object;
     if (!selectedNodes.includes(intersectedNode)) {
-      intersectedNode.material = selectedMaterial
+      intersectedNode.material = hoveredNode === intersectedNode ? hoveredSelectedMaterial : selectedMaterial;
       selectedNodes.push(intersectedNode); // Add to selected nodes list
+    } else {
+      intersectedNode.material = intersectedNode.userData.originalMaterial;
+      selectedNodes = selectedNodes.filter(node => node !== intersectedNode); // Remove from selected
     }
   }
 }
@@ -190,24 +139,29 @@ function animate() {
   const intersects = raycaster.intersectObjects(nodes);
 
   if (intersects.length > 0) {
-    if (INTERSECTED != intersects[0].object) {
-      if (INTERSECTED) {
-        if (!selectedNodes.includes(INTERSECTED)) {
-          INTERSECTED.material = defaultMaterial
-        }
+    const intersectedNode = intersects[0].object;
+    if (hoveredNode !== intersectedNode) {
+      if (hoveredNode && !selectedNodes.includes(hoveredNode)) {
+        hoveredNode.material = hoveredNode.userData.originalMaterial;
+      } else if (hoveredNode && selectedNodes.includes(hoveredNode)) {
+        hoveredNode.material = selectedMaterial;
       }
-      INTERSECTED = intersects[0].object;
-      if (!selectedNodes.includes(INTERSECTED)) {
-        INTERSECTED.material = hoveredMaterial
+      hoveredNode = intersectedNode;
+      if (!selectedNodes.includes(hoveredNode)) {
+        hoveredNode.material = hoveredMaterial;
+      } else {
+        hoveredNode.material = hoveredSelectedMaterial;
       }
     }
   } else {
-    if (INTERSECTED) {
-      if (!selectedNodes.includes(INTERSECTED)) {
-        INTERSECTED.material = defaultMaterial
+    if (hoveredNode) {
+      if (!selectedNodes.includes(hoveredNode)) {
+        hoveredNode.material = hoveredNode.userData.originalMaterial;
+      } else {
+        hoveredNode.material = selectedMaterial;
       }
-      INTERSECTED = null;
     }
+    hoveredNode = null;
   }
 
   controls.update();
