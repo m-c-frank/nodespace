@@ -8,6 +8,11 @@ let mouse = new THREE.Vector2();
 let INTERSECTED = null;
 const URL_NODES = 'http://localhost:5000/nodes';
 let nodes = [];
+let selectedNodes = [];
+
+let defaultMaterial = new THREE.MeshBasicMaterial({ color: 0x808080 });
+let selectedMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+let hoveredMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
 
 init();
 animate();
@@ -49,6 +54,9 @@ function init() {
 
   // Handle mouse move
   window.addEventListener('mousemove', onMouseMove, false);
+
+  // Handle click
+  window.addEventListener('click', onClick, false);
 }
 
 function createAxes() {
@@ -141,7 +149,7 @@ async function drawNodes() {
   // nodes are spheres at random positions within the grid
   const fetchedNodes = await getNodes();
   fetchedNodes.forEach(node => {
-    const nodeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 }); // Create unique material for each node
+    const nodeMaterial = defaultMaterial
     const nodeGeometry = new THREE.SphereGeometry(0.1, 32, 32);
     const sphere = new THREE.Mesh(nodeGeometry, nodeMaterial);
     sphere.position.set(node.x, node.y, node.z);
@@ -156,6 +164,22 @@ function onMouseMove(event) {
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 }
 
+function onClick(event) {
+  // Update the raycaster
+  raycaster.setFromCamera(mouse, camera);
+
+  // Calculate objects intersecting the picking ray
+  const intersects = raycaster.intersectObjects(nodes);
+
+  if (intersects.length > 0) {
+    const intersectedNode = intersects[0].object;
+    if (!selectedNodes.includes(intersectedNode)) {
+      intersectedNode.material = selectedMaterial
+      selectedNodes.push(intersectedNode); // Add to selected nodes list
+    }
+  }
+}
+
 function animate() {
   requestAnimationFrame(animate);
 
@@ -167,13 +191,21 @@ function animate() {
 
   if (intersects.length > 0) {
     if (INTERSECTED != intersects[0].object) {
-      if (INTERSECTED) INTERSECTED.material.color.setHex(0x000000); // Reset previous intersection object color
+      if (INTERSECTED) {
+        if (!selectedNodes.includes(INTERSECTED)) {
+          INTERSECTED.material = defaultMaterial
+        }
+      }
       INTERSECTED = intersects[0].object;
-      INTERSECTED.material.color.setHex(0xff0000); // Set color for new intersection object
+      if (!selectedNodes.includes(INTERSECTED)) {
+        INTERSECTED.material = hoveredMaterial
+      }
     }
   } else {
     if (INTERSECTED) {
-      INTERSECTED.material.color.setHex(0x000000); // Reset previous intersection object color
+      if (!selectedNodes.includes(INTERSECTED)) {
+        INTERSECTED.material = defaultMaterial
+      }
       INTERSECTED = null;
     }
   }
