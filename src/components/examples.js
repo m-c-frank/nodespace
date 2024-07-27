@@ -18,8 +18,11 @@ const createParametricSurface = (scene) => {
 }
 
 const createGridPlane = (scene, normal, size, divisions) =>{
-  // Create a plane
+  // create a grid plane with transparent gray grid lines
   const gridHelper = new THREE.GridHelper(size, divisions);
+  gridHelper.material.opacity = 0.9;
+  console.log(gridHelper.material);
+
   scene.add(gridHelper);
 
   // Align the plane to the given normal

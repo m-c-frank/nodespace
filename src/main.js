@@ -22,7 +22,7 @@ animate();
 function init() {
   // Create the scene
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xffffff);
+  scene.background = new THREE.Color(0x282828);
 
   // Create the camera
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -45,18 +45,13 @@ function init() {
   createGridPlane(scene, new THREE.Vector3(1, 0, 0), 10, 10); // YZ plane
   createGridPlane(scene, new THREE.Vector3(0, 1, 0), 10, 10); // ZX plane
 
-  // Create a surface
-  createParametricSurface(scene);
-
   // Draw nodes
   drawNodes();
 
   // Handle window resize
   window.addEventListener('resize', onWindowResize);
-
   // Handle mouse move
   window.addEventListener('mousemove', onMouseMove, false);
-
   // Handle click
   window.addEventListener('click', onClick, false);
 }
@@ -97,7 +92,7 @@ async function drawNodes() {
     const nodeGeometry = new THREE.SphereGeometry(0.1, 32, 32);
     const sphere = new THREE.Mesh(nodeGeometry, nodeMaterial);
     sphere.position.set(node.x, node.y, node.z);
-    sphere.userData = { originalMaterial: nodeMaterial, id: node.id };
+    sphere.userData = { originalMaterial: nodeMaterial, id: node.node_id };
     scene.add(sphere);
     nodes.push(sphere); // Store reference to the node
   });
@@ -127,9 +122,15 @@ function onClick(event) {
     } else {
       intersectedNode.material = intersectedNode.userData.originalMaterial;
       selectedNodes = selectedNodes.filter(node => node !== intersectedNode); // Remove from selected
-      const textLabel = scene.children.find(child => child.isTextLabel && child.userData.node === intersectedNode);
-      scene.remove(textLabel);
+      removeTextLabel(intersectedNode); // Remove the associated text label
     }
+  }
+}
+
+function removeTextLabel(node) {
+  const textLabel = scene.children.find(child => child.userData.isTextLabel && child.userData.node === node);
+  if (textLabel) {
+    scene.remove(textLabel);
   }
 }
 
@@ -168,6 +169,14 @@ function animate() {
     hoveredNode = null;
   }
 
+  // move the nodes a bit
+  nodes.forEach(node => {
+    node.position.x += Math.random() * (Math.random() > 0.5 ? 1 : -1) * 0.01;
+    node.position.y += Math.random() * (Math.random() > 0.5 ? 1 : -1) * 0.01;
+    node.position.z += Math.random() * (Math.random() > 0.5 ? 1 : -1) * 0.01;
+  }
+  );
+
   updateTextLabels(); // Ensure text labels face the camera
 
   controls.update();
@@ -180,12 +189,13 @@ function onWindowResize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-function createTextLabel(message) {
+function createTextLabel(node_id) {
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
   context.font = '48px Arial';
-  context.fillStyle = 'rgba(0, 0, 0, 1)';
-  context.fillText(message, 0, 50);
+  context.fillStyle = 'rgb(255, 255, 255)';
+  const message = `node_id ${node_id}`;
+  context.fillText(message, 0, 48);
 
   const texture = new THREE.CanvasTexture(canvas);
   const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
