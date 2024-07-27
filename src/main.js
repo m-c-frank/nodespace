@@ -3,7 +3,11 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ParametricGeometry } from 'three/addons/geometries/ParametricGeometry.js';
 
 let scene, camera, renderer, controls;
+let raycaster = new THREE.Raycaster();
+let mouse = new THREE.Vector2();
+let INTERSECTED = null;
 const URL_NODES = 'http://localhost:5000/nodes';
+let nodes = [];
 
 init();
 animate();
@@ -42,6 +46,9 @@ function init() {
 
   // Handle window resize
   window.addEventListener('resize', onWindowResize);
+
+  // Handle mouse move
+  window.addEventListener('mousemove', onMouseMove, false);
 }
 
 function createAxes() {
@@ -85,7 +92,6 @@ function createGridPlane(normal) {
   quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
   gridHelper.applyQuaternion(quaternion);
 }
-
 
 function createSurface() {
   function parametricFunction(u, v, target) {
@@ -133,24 +139,51 @@ async function getNodes() {
 
 async function drawNodes() {
   // nodes are spheres at random positions within the grid
-  const nodeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-  const nodeGeometry = new THREE.SphereGeometry(0.1, 32, 32);
-  const nodes = await getNodes()
-  nodes.forEach(node => {
+  const fetchedNodes = await getNodes();
+  fetchedNodes.forEach(node => {
+    const nodeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 }); // Create unique material for each node
+    const nodeGeometry = new THREE.SphereGeometry(0.1, 32, 32);
     const sphere = new THREE.Mesh(nodeGeometry, nodeMaterial);
     sphere.position.set(node.x, node.y, node.z);
     scene.add(sphere);
+    nodes.push(sphere); // Store reference to the node
   });
+}
+
+function onMouseMove(event) {
+  // Calculate mouse position in normalized device coordinates (-1 to +1) for both components
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  // Update the raycaster
+  raycaster.setFromCamera(mouse, camera);
+
+  // Calculate objects intersecting the picking ray
+  const intersects = raycaster.intersectObjects(nodes);
+
+  if (intersects.length > 0) {
+    if (INTERSECTED != intersects[0].object) {
+      if (INTERSECTED) INTERSECTED.material.color.setHex(0x000000); // Reset previous intersection object color
+      INTERSECTED = intersects[0].object;
+      INTERSECTED.material.color.setHex(0xff0000); // Set color for new intersection object
+    }
+  } else {
+    if (INTERSECTED) {
+      INTERSECTED.material.color.setHex(0x000000); // Reset previous intersection object color
+      INTERSECTED = null;
+    }
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
 }
 
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-function animate() {
-  requestAnimationFrame(animate);
-  controls.update();
-  renderer.render(scene, camera);
 }
