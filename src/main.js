@@ -61,9 +61,8 @@ function init() {
   window.addEventListener('click', onClick, false);
 }
 
-
 async function getNodes() {
-  //fetch from URL_NODES
+  // Fetch from URL_NODES
   let nodes = [];
   await fetch(URL_NODES)
     .then(response => response.json())
@@ -74,7 +73,7 @@ async function getNodes() {
       console.error('Error:', error);
     });
 
-  // if no x y z values are provided, use random values
+  // If no x y z values are provided, use random values
   nodes = nodes.map(node => {
     if (node.x === undefined) {
       node.x = Math.random() * 10 - 5;
@@ -91,14 +90,14 @@ async function getNodes() {
 }
 
 async function drawNodes() {
-  // nodes are spheres at random positions within the grid
+  // Nodes are spheres at random positions within the grid
   const fetchedNodes = await getNodes();
   fetchedNodes.forEach(node => {
     const nodeMaterial = defaultMaterial.clone();
     const nodeGeometry = new THREE.SphereGeometry(0.1, 32, 32);
     const sphere = new THREE.Mesh(nodeGeometry, nodeMaterial);
     sphere.position.set(node.x, node.y, node.z);
-    sphere.userData = { originalMaterial: nodeMaterial };
+    sphere.userData = { originalMaterial: nodeMaterial, id: node.id };
     scene.add(sphere);
     nodes.push(sphere); // Store reference to the node
   });
@@ -122,9 +121,14 @@ function onClick(event) {
     if (!selectedNodes.includes(intersectedNode)) {
       intersectedNode.material = hoveredNode === intersectedNode ? hoveredSelectedMaterial : selectedMaterial;
       selectedNodes.push(intersectedNode); // Add to selected nodes list
+      const textLabel = createTextLabel(intersectedNode.userData.id);
+      textLabel.userData.node = intersectedNode; // Link the text label to the node
+      scene.add(textLabel);
     } else {
       intersectedNode.material = intersectedNode.userData.originalMaterial;
       selectedNodes = selectedNodes.filter(node => node !== intersectedNode); // Remove from selected
+      const textLabel = scene.children.find(child => child.isTextLabel && child.userData.node === intersectedNode);
+      scene.remove(textLabel);
     }
   }
 }
@@ -164,6 +168,8 @@ function animate() {
     hoveredNode = null;
   }
 
+  updateTextLabels(); // Ensure text labels face the camera
+
   controls.update();
   renderer.render(scene, camera);
 }
@@ -172,4 +178,29 @@ function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function createTextLabel(message) {
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  context.font = '48px Arial';
+  context.fillStyle = 'rgba(0, 0, 0, 1)';
+  context.fillText(message, 0, 50);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+  const sprite = new THREE.Sprite(spriteMaterial);
+  sprite.scale.set(1, 0.5, 1); // Scale the sprite appropriately
+  sprite.userData = { isTextLabel: true }; // Mark as text label
+
+  return sprite;
+}
+
+function updateTextLabels() {
+  scene.children.forEach(child => {
+    if (child.userData.isTextLabel && child.userData.node) {
+      child.position.copy(child.userData.node.position).add(new THREE.Vector3(0, 0.2, 0)); // Offset the text slightly above the node
+      child.lookAt(camera.position); // Ensure the text faces the camera
+    }
+  });
 }
